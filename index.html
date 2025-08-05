@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>2025srtp-走行部数据智能分析CSV 批量折线图 + 批量图片下载</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.7.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+
+        #chartsContainer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .chart-box {
+            width: 1600px;
+            /* ✅ 固定宽度防止html2canvas截图异常 */
+            height: 800px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            position: relative;
+            margin: 0 auto;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #5470C6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #3658a7;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>📊 2025SRTP-走行部数据智能分析 CSV 批量折线图 + 批量图片下载</h2>
+    <input type="file" id="csvFiles" accept=".csv" multiple>
+    <br>
+    <button id="downloadBtn">📥 批量下载所有图片</button>
+    <div id="chartsContainer"></div>
+
+    <script>
+        const charts = [];
+
+        document.getElementById('csvFiles').addEventListener('change', function () {
+            const files = Array.from(this.files);
+            if (!files.length) return;
+
+            document.getElementById('chartsContainer').innerHTML = '';
+            charts.length = 0;
+
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const lines = event.target.result.trim().split('\n');
+                    const xData = [];
+                    const yData = [];
+
+                    lines.forEach(line => {
+                        const [y, time] = line.split(',');
+                        const yVal = parseFloat(y);
+                        if (!isNaN(yVal) && time) {
+                            yData.push(yVal);
+                            xData.push(time.trim());
+                        }
+                    });
+
+                    const chartBox = document.createElement('div');
+                    chartBox.className = 'chart-box';
+                    document.getElementById('chartsContainer').appendChild(chartBox);
+
+                    const chart = echarts.init(chartBox, null, { devicePixelRatio: 2 });
+
+                    chart.setOption({
+                        title: {
+                            text: file.name.replace(/\.[^/.]+$/, "") + ' 时域图',
+                            left: 'center'
+                        },
+                        tooltip: { trigger: 'axis' },
+                        dataZoom: [
+                            { type: 'slider', xAxisIndex: 0 },
+                            { type: 'inside', xAxisIndex: 0 }
+                        ],
+                        xAxis: {
+                            type: 'category',
+                            data: xData,
+                            axisLabel: {
+                                rotate: 45,
+                                fontSize: 12,
+                                interval: Math.ceil(xData.length / 50)
+                            },
+                            name: '时间',
+                            nameLocation: 'middle',
+                            nameGap: 30
+                        },
+                        yAxis: {
+                            type: 'value',
+                            min: 'dataMin',
+                            max: 'dataMax',
+                            splitNumber: 20,
+                            axisLabel: { formatter: '{value}' },
+                            name: 'value',
+                            nameRotate: 90,
+                            nameLocation: 'middle',
+                            nameGap: 50
+                        },
+                        series: [{
+                            name: '测量值',
+                            type: 'line',
+                            data: yData,
+                            smooth: false,
+                            animation: false,
+                            sampling: 'lttb',
+                            lineStyle: {
+                                width: 1.5,
+                                color: '#5470C6'
+                            },
+                            symbol: 'none'
+                        }]
+                    });
+
+                    charts.push({ chart, fileName: file.name.replace(/\.[^/.]+$/, "") });
+                };
+                reader.readAsText(file);
+            });
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', async function () {
+            if (charts.length === 0) {
+                alert('请先上传 CSV 文件！');
+                return;
+            }
+
+            const zip = new JSZip();
+            const promises = charts.map(({ chart, fileName }) => {
+                return html2canvas(chart.getDom(), { scale: 2 }).then(canvas => {
+                    return new Promise(resolve => {
+                        canvas.toBlob(blob => {
+                            zip.file(fileName + '.png', blob);
+                            resolve();
+                        });
+                    });
+                });
+            });
+
+            Promise.all(promises).then(() => {
+                zip.generateAsync({ type: 'blob' }).then(content => {
+                    saveAs(content, 'charts.zip');
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
